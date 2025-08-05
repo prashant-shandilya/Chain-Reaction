@@ -4,11 +4,18 @@ import Square from './Square.js'
 <link rel="stylesheet" href="./index.css" />
 function Board() {
 
-   let {game,checkWin,player} = useGlobalContext();
+   let {game,checkWin,player,aiMode,makeAiMove,aiThinking} = useGlobalContext();
    
    useEffect(()=>{
       setInterval(()=>checkWin(),1000);
    },[])
+
+   // Trigger AI move when it's AI's turn
+   useEffect(() => {
+      if (aiMode && player === 1 && !aiThinking) {
+         makeAiMove();
+      }
+   }, [player, aiMode, aiThinking]);
 
     return(
     <>

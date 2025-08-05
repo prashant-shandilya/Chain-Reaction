@@ -13,6 +13,19 @@ function AppProvider ({children})  {
      let [player,setPlayer] = useState(0); // 0 for red and 1 for green
      let [modal,setModal] = useState(false);
      let [winner,setWinner] = useState('');
+     let [aiMode, setAiMode] = useState(false); // false = human vs human, true = human vs AI
+     let [difficulty, setDifficulty] = useState('medium'); // easy, medium, hard
+     let [aiThinking, setAiThinking] = useState(false);
+
+     function toggleAiMode() {
+         setAiMode(!aiMode);
+         reset(); // Reset game when switching modes
+     }
+
+     function changeDifficulty(newDifficulty) {
+         setDifficulty(newDifficulty);
+     }
+
      function changePlayer(){
         if(player===0)setPlayer(1);
         else setPlayer(0);
@@ -35,6 +48,129 @@ function AppProvider ({children})  {
          }
     
      }
+
+    // AI Move Evaluation Functions
+    function getValidMoves() {
+        const validMoves = [];
+        for (let i = 0; i < 81; i++) {
+            if (game[i][0] === -1 || game[i][0] === 1) { // Empty or AI's own pieces (AI is player 1)
+                validMoves.push(i);
+            }
+        }
+        return validMoves;
+    }
+
+    function evaluateMove(index) {
+        // Create a copy of the current game state
+        const testGame = game.map(cell => [...cell]);
+        
+        // Simulate the move
+        if (testGame[index][0] === -1) {
+            testGame[index][0] = 1; // AI is player 1 (red)
+            testGame[index][1] = 1;
+        } else {
+            testGame[index][1]++;
+        }
+
+        let score = 0;
+        
+        // Check if this move would cause an explosion
+        const [willExplode, affectedCells] = Check(index, testGame[index][1]);
+        if (willExplode) {
+            // Bonus for causing explosions
+            score += affectedCells.length * 10;
+            
+            // Check how many opponent pieces this could capture
+            affectedCells.forEach(cellIndex => {
+                if (testGame[cellIndex] && testGame[cellIndex][0] === 0) {
+                    score += 20; // High bonus for capturing opponent pieces
+                }
+            });
+        }
+
+        // Defensive bonus: prefer moves that don't create opportunities for opponent
+        const adjacentCells = getAdjacentCells(index);
+        adjacentCells.forEach(adjIndex => {
+            if (testGame[adjIndex] && testGame[adjIndex][0] === 0) {
+                const maxCapacity = getMaxCapacity(adjIndex);
+                if (testGame[adjIndex][1] === maxCapacity - 1) {
+                    score -= 15; // Penalty for giving opponent explosion opportunity
+                }
+            }
+        });
+
+        // Positional bonus: prefer central positions early in the game
+        if (count < 10) {
+            const row = Math.floor(index / 9);
+            const col = index % 9;
+            const centerDistance = Math.abs(row - 4) + Math.abs(col - 4);
+            score += (8 - centerDistance) * 2;
+        }
+
+        return score;
+    }
+
+    function getAdjacentCells(index) {
+        const adjacent = [];
+        const row = Math.floor(index / 9);
+        const col = index % 9;
+
+        // Up, Down, Left, Right
+        if (row > 0) adjacent.push(index - 9);
+        if (row < 8) adjacent.push(index + 9);
+        if (col > 0) adjacent.push(index - 1);
+        if (col < 8) adjacent.push(index + 1);
+
+        return adjacent;
+    }
+
+    function getMaxCapacity(index) {
+        if (corner.includes(index)) return 2;
+        if (upsides.includes(index) || dowSide.includes(index) || lefSide.includes(index) || riSide.includes(index)) return 3;
+        return 4;
+    }
+
+    function makeAiMove() {
+        if (!aiMode || player !== 1 || modal) return;
+
+        setAiThinking(true);
+        
+        setTimeout(() => {
+            const validMoves = getValidMoves();
+            if (validMoves.length === 0) {
+                setAiThinking(false);
+                return;
+            }
+
+            let bestMove = validMoves[0];
+            let bestScore = -Infinity;
+
+            // Evaluate each valid move
+            validMoves.forEach(move => {
+                let score = evaluateMove(move);
+                
+                // Add randomness based on difficulty
+                if (difficulty === 'easy') {
+                    score += Math.random() * 50 - 25; // High randomness
+                } else if (difficulty === 'medium') {
+                    score += Math.random() * 20 - 10; // Medium randomness
+                }
+                // Hard mode has no randomness
+
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMove = move;
+                }
+            });
+
+            // Execute the move
+            const currentStatus = game[bestMove];
+            UpBoard(currentStatus, bestMove, true);
+            changePlayer();
+            setAiThinking(false);
+        }, difficulty === 'easy' ? 500 : difficulty === 'medium' ? 1000 : 1500);
+    }
+
     function UpBoard(status,index,flag){
         setGame(game.map((item,indu)=>{if(indu===index){if(flag)item[0]=player;else item[0]=status[0];item[1]++;return item;}else return item}));
         
@@ -94,7 +230,7 @@ function AppProvider ({children})  {
 
 return (
         <>
-<Main.Provider value = {{player,Check,UpBoard,game,zeroSquare,changePlayer,checkWin,reset,winner,modal}}>
+<Main.Provider value = {{player,Check,UpBoard,game,zeroSquare,changePlayer,checkWin,reset,winner,modal,aiMode,toggleAiMode,difficulty,changeDifficulty,aiThinking,makeAiMove}}>
 {children}
 </Main.Provider>
         </>
